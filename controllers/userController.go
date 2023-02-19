@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 
 	"go-authentication/database"
 	"go-authentication/helpers"
@@ -24,9 +26,27 @@ const timeLayout = time.RFC3339
 
 var timeString = time.Now().Format(timeLayout)
 
-func HashPassword()
+func HashPassword(passwordPut string) string {
+	byte, err := bcrypt.GenerateFromPassword([]byte(passwordPut), 14)
+	if err != nil {
+		log.Panic(err)
+	}
+	return string(byte)
+}
 
-func VerifyPassword()
+func VerifyPassword(userPasswordPut, providedFoundPassword string) (bool, string) {
+	check := true
+	msg := ""
+	//use bcrypt to compare hash and password
+	err := bcrypt.CompareHashAndPassword([]byte(providedFoundPassword), []byte(userPasswordPut))
+	if err != nil {
+		msg = fmt.Sprint("email of password is incorrect")
+		check = false
+
+	}
+	return check, msg
+
+}
 
 func Signup() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -51,6 +71,11 @@ func Signup() gin.HandlerFunc {
 				"error": " error occured while checking for the user email",
 			})
 		}
+
+		//hash password
+		password := HashPassword(user.Password)
+		user.Password = password
+
 		count, err = userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
 		defer cancel()
 		if err != nil {
@@ -85,7 +110,32 @@ func Signup() gin.HandlerFunc {
 	}
 }
 
-func Login()
+func Login() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		var user, foundUser models.User
+		err := c.BindJSON(&user)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+
+		}
+
+		err = userCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
+		defer cancel()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "email or password is not correct",
+			})
+			return
+		}
+		//check password and email is matching
+		passwordIsValid, msg := VerifyPassword(user.Password, foundUser.Password)
+		defer cancel()
+	}
+}
 
 func GetUsers()
 
