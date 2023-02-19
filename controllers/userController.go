@@ -134,6 +134,29 @@ func Login() gin.HandlerFunc {
 		//check password and email is matching
 		passwordIsValid, msg := VerifyPassword(user.Password, foundUser.Password)
 		defer cancel()
+		if passwordIsValid != true {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": msg,
+			})
+			return
+		}
+		if foundUser.Email == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "user not found",
+			})
+
+		} else {
+			token, refreshToken, _ := helpers.GenerateAllTokens(foundUser.Email, foundUser.FirstName, foundUser.LastName, foundUser.UserType, foundUser.UserID)
+			helpers.UpdateAllTokens(token, refreshToken, foundUser.UserID)
+		}
+		err = userCollection.FindOne(ctx, bson.M{"user_id": foundUser.UserID}).Decode(&foundUser)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, foundUser)
 	}
 }
 
